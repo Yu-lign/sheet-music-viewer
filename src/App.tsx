@@ -12,26 +12,34 @@ function App() {
   const [triggerKey, setTriggerKey] = useState<string>('AudioVolumeUp');
   const [isSettingKey, setIsSettingKey] = useState(false);
   const [isVolumeHackEnabled, setIsVolumeHackEnabled] = useState(false);
+  const [debugLog, setDebugLog] = useState<string>('');
   
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const renderTaskRef = useRef<pdfjsLib.RenderTask | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const lastVolumeRef = useRef<number>(0.5);
 
+  const log = (msg: string) => {
+    console.log(msg);
+    setDebugLog(prev => `${new Date().toLocaleTimeString()}: ${msg}\n${prev}`.slice(0, 500));
+  };
+
   // Load default test PDF on mount
   useEffect(() => {
     const loadDefaultPdf = async () => {
       try {
+        log("Loading default PDF...");
         const response = await fetch('/test_sheet_music.pdf');
-        if (!response.ok) throw new Error('PDF not found');
+        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
         const arrayBuffer = await response.arrayBuffer();
         const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer });
         const pdf = await loadingTask.promise;
         setPdfDoc(pdf);
         setNumPages(pdf.numPages);
         setPageNum(1);
-      } catch (err) {
-        console.error("Default PDF load error:", err);
+        log("PDF loaded successfully!");
+      } catch (err: any) {
+        log(`PDF load error: ${err.message}`);
       }
     };
     loadDefaultPdf();
@@ -41,6 +49,7 @@ function App() {
   const onFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
+      log(`File selected: ${file.name}`);
       const reader = new FileReader();
       reader.onload = async (event) => {
         try {
@@ -50,8 +59,9 @@ function App() {
           setPdfDoc(pdf);
           setNumPages(pdf.numPages);
           setPageNum(1);
-        } catch (err) {
-          console.error("File load error:", err);
+          log("File PDF loaded successfully!");
+        } catch (err: any) {
+          log(`File load error: ${err.message}`);
         }
       };
       reader.readAsArrayBuffer(file);
@@ -67,8 +77,11 @@ function App() {
     }
 
     try {
+      log(`Rendering page ${num}...`);
       const page = await pdf.getPage(num);
-      const viewport = page.getViewport({ scale: 2.0 });
+      // Lower scale for mobile performance (Android memory limits)
+      const scale = window.innerWidth < 768 ? 1.2 : 1.8;
+      const viewport = page.getViewport({ scale });
       const canvas = canvasRef.current;
       const context = canvas.getContext('2d');
 
@@ -85,10 +98,11 @@ function App() {
         const renderTask = page.render(renderContext);
         renderTaskRef.current = renderTask;
         await renderTask.promise;
+        log("Page rendered!");
       }
     } catch (err: any) {
       if (err.name !== 'RenderingCancelledException') {
-        console.error("Render error:", err);
+        log(`Render error: ${err.message}`);
       }
     }
   }, []);
@@ -228,6 +242,11 @@ function App() {
 
       <div style={{ marginTop: '70px', width: '100%', display: 'flex', justifyContent: 'center' }}>
         <canvas ref={canvasRef} style={{ maxWidth: '100%', height: 'auto', backgroundColor: '#fff' }} />
+      </div>
+
+      {/* Debug Console Overlay */}
+      <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, maxHeight: '100px', overflowY: 'auto', backgroundColor: 'rgba(0,0,0,0.8)', color: '#0f0', fontSize: '10px', padding: '5px', zIndex: 100, pointerEvents: 'none', whiteSpace: 'pre-wrap' }}>
+        {debugLog}
       </div>
     </div>
   );
