@@ -1,8 +1,9 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import * as pdfjsLib from 'pdfjs-dist';
 
-// Worker path for pdf.js (using unpkg as a reliable source, version matching package.json)
-pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@5.5.207/build/pdf.worker.min.js`;
+// Use the local worker from node_modules - Vite will handle this correctly
+import pdfWorker from 'pdfjs-dist/build/pdf.worker.mjs?url';
+pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorker;
 
 function App() {
   const [pdfDoc, setPdfDoc] = useState<pdfjsLib.PDFDocumentProxy | null>(null);
@@ -38,12 +39,16 @@ function App() {
     if (file) {
       const reader = new FileReader();
       reader.onload = async (event) => {
-        const arrayBuffer = event.target?.result as ArrayBuffer;
-        const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer });
-        const pdf = await loadingTask.promise;
-        setPdfDoc(pdf);
-        setNumPages(pdf.numPages);
-        setPageNum(1);
+        try {
+          const arrayBuffer = event.target?.result as ArrayBuffer;
+          const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer });
+          const pdf = await loadingTask.promise;
+          setPdfDoc(pdf);
+          setNumPages(pdf.numPages);
+          setPageNum(1);
+        } catch (err) {
+          console.error("File load error:", err);
+        }
       };
       reader.readAsArrayBuffer(file);
     }
@@ -57,30 +62,30 @@ function App() {
       renderTaskRef.current.cancel();
     }
 
-    const page = await pdf.getPage(num);
-    const viewport = page.getViewport({ scale: 2.0 }); // High quality scale
-    const canvas = canvasRef.current;
-    const context = canvas.getContext('2d');
+    try {
+      const page = await pdf.getPage(num);
+      const viewport = page.getViewport({ scale: 2.0 }); // High quality scale
+      const canvas = canvasRef.current;
+      const context = canvas.getContext('2d');
 
-    if (context) {
-      canvas.height = viewport.height;
-      canvas.width = viewport.width;
+      if (context) {
+        canvas.height = viewport.height;
+        canvas.width = viewport.width;
 
-      const renderContext = {
-        canvasContext: context,
-        viewport: viewport,
-        canvas: canvas,
-      };
-      
-      const renderTask = page.render(renderContext);
-      renderTaskRef.current = renderTask;
-      
-      try {
+        const renderContext = {
+          canvasContext: context,
+          viewport: viewport,
+          canvas: canvas,
+        };
+        
+        const renderTask = page.render(renderContext);
+        renderTaskRef.current = renderTask;
+        
         await renderTask.promise;
-      } catch (err: any) {
-        if (err.name !== 'RenderingCancelledException') {
-          console.error(err);
-        }
+      }
+    } catch (err: any) {
+      if (err.name !== 'RenderingCancelledException') {
+        console.error("Render error:", err);
       }
     }
   }, []);
@@ -115,21 +120,21 @@ function App() {
   }, [triggerKey, isSettingKey, numPages]);
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', minHeight: '100vh', backgroundColor: '#1a1a1a', color: '#fff' }}>
-      <div style={{ position: 'fixed', top: 0, left: 0, right: 0, zIndex: 10, backgroundColor: 'rgba(0,0,0,0.7)', padding: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <input type="file" accept="application/pdf" onChange={onFileChange} style={{ fontSize: '12px' }} />
-        <div>
-          <span style={{ marginRight: '15px' }}>{pageNum} / {numPages}</span>
-          <button onClick={() => setPageNum(p => Math.max(1, p - 1))} style={{ padding: '5px 15px' }}>前</button>
-          <button onClick={() => setPageNum(p => Math.min(numPages, p + 1))} style={{ padding: '5px 15px', marginLeft: '5px' }}>次</button>
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', minHeight: '100vh', backgroundColor: '#1a1a1a', color: '#fff', padding: 0, margin: 0 }}>
+      <div style={{ position: 'fixed', top: 0, left: 0, right: 0, zIndex: 10, backgroundColor: 'rgba(0,0,0,0.85)', padding: '15px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', boxShadow: '0 2px 10px rgba(0,0,0,0.5)' }}>
+        <input type="file" accept="application/pdf" onChange={onFileChange} style={{ fontSize: '14px', color: '#ccc' }} />
+        <div style={{ fontWeight: 'bold' }}>
+          <span style={{ marginRight: '20px', color: '#3498db' }}>{pageNum} / {numPages}</span>
+          <button onClick={() => setPageNum(p => Math.max(1, p - 1))} style={{ padding: '8px 20px', backgroundColor: '#333', color: '#fff', border: '1px solid #555', borderRadius: '4px' }}>前</button>
+          <button onClick={() => setPageNum(p => Math.min(numPages, p + 1))} style={{ padding: '8px 20px', backgroundColor: '#333', color: '#fff', border: '1px solid #555', borderRadius: '4px', marginLeft: '5px' }}>次</button>
         </div>
-        <button onClick={() => setIsSettingKey(true)} disabled={isSettingKey} style={{ fontSize: '12px' }}>
-          {isSettingKey ? 'キー押して...' : `めくりキー: ${triggerKey}`}
+        <button onClick={() => setIsSettingKey(true)} disabled={isSettingKey} style={{ fontSize: '13px', backgroundColor: isSettingKey ? '#e67e22' : '#2980b9', border: 'none', color: '#fff', padding: '8px 15px', borderRadius: '4px', transition: 'background 0.3s' }}>
+          {isSettingKey ? 'キーを入力中...' : `譜めくりボタン: ${triggerKey}`}
         </button>
       </div>
 
-      <div style={{ marginTop: '60px', width: '100%', display: 'flex', justifyContent: 'center' }}>
-        <canvas ref={canvasRef} style={{ maxWidth: '100%', height: 'auto', backgroundColor: '#fff' }} />
+      <div style={{ marginTop: '80px', width: '100%', display: 'flex', justifyContent: 'center', paddingBottom: '20px' }}>
+        <canvas ref={canvasRef} style={{ maxWidth: '98%', height: 'auto', backgroundColor: '#fff', boxShadow: '0 0 20px rgba(0,0,0,1)' }} />
       </div>
     </div>
   );
