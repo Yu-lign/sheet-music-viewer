@@ -104,17 +104,39 @@ function App() {
 
   const enableVolumeHack = () => {
     if (audioRef.current) {
+      log("Activating Ultra-Volume Hack...");
+      // Use a slightly more "real" audio to keep Android awake
       audioRef.current.play().then(() => {
         setIsVolumeHackEnabled(true);
+        // Reset to middle volume
         audioRef.current!.volume = 0.5;
         lastVolumeRef.current = 0.5;
-        log("Volume hack active.");
+        log("Hack Active. Monitoring volume changes...");
+        
         if ('mediaSession' in navigator) {
+          navigator.mediaSession.metadata = new MediaMetadata({
+            title: 'Sheet Music Viewer (Active)',
+            artist: 'Yu-lign',
+            album: 'Smart Sheet Music',
+            artwork: [{ src: 'https://via.placeholder.com/512', sizes: '512x512', type: 'image/png' }]
+          });
           navigator.mediaSession.playbackState = 'playing';
+          
+          // Add extra handlers that some remotes use
+          const actions: MediaSessionAction[] = ['play', 'pause', 'nexttrack', 'previoustrack', 'seekbackward', 'seekforward'];
+          actions.forEach(action => {
+            try {
+              navigator.mediaSession.setActionHandler(action, () => {
+                log(`Remote action: ${action}`);
+                if (action === 'nexttrack' || action === 'seekforward' || action === 'play') nextPage();
+                if (action === 'previoustrack' || action === 'seekbackward' || action === 'pause') prevPage();
+              });
+            } catch (e) {}
+          });
         }
       }).catch((err) => {
-        log(`Audio error: ${err.message}`);
-        alert("Please tap anywhere first, then try again.");
+        log(`Audio Activation Failed: ${err.message}`);
+        alert("Please tap the screen first to enable audio features.");
       });
     }
   };
@@ -129,7 +151,7 @@ function App() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', minHeight: '100vh', backgroundColor: '#000', color: '#fff', padding: 0, margin: 0 }}>
-      <audio ref={audioRef} src="data:audio/wav;base64,UklGRigAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQQAAAAAAA==" loop />
+      <audio ref={audioRef} src="data:audio/wav;base64,UklGRjIAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoAAAAAQEBAQEBAQEB" loop />
 
       <div style={{ position: 'fixed', top: 0, left: 0, right: 0, zIndex: 10, backgroundColor: 'rgba(20,20,20,0.95)', padding: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #333' }}>
         <input type="file" accept="application/pdf" onChange={handleFileChange} style={{ fontSize: '10px', width: '80px' }} />
