@@ -140,10 +140,8 @@ function App() {
       if (!audioRef.current) return;
       const currentVolume = audioRef.current.volume;
       
-      // If volume changed, trigger next page
       if (currentVolume !== lastVolumeRef.current) {
         nextPage();
-        // Reset volume to 0.5 to prevent reaching 0 or 1
         audioRef.current.volume = 0.5;
         lastVolumeRef.current = 0.5;
       }
@@ -153,18 +151,54 @@ function App() {
     if (audio) {
       audio.addEventListener('volumechange', handleVolumeChange);
     }
+    
+    // Media Session API Setup
+    if ('mediaSession' in navigator) {
+      navigator.mediaSession.setActionHandler('nexttrack', () => {
+        nextPage();
+      });
+      navigator.mediaSession.setActionHandler('previoustrack', () => {
+        prevPage();
+      });
+      // Also register play/pause to keep it active
+      navigator.mediaSession.setActionHandler('play', () => {
+        audioRef.current?.play();
+      });
+      navigator.mediaSession.setActionHandler('pause', () => {
+        audioRef.current?.pause();
+      });
+    }
+
     return () => {
       if (audio) {
         audio.removeEventListener('volumechange', handleVolumeChange);
       }
     };
-  }, [isVolumeHackEnabled, nextPage]);
+  }, [isVolumeHackEnabled, nextPage, prevPage]);
 
   const enableVolumeHack = () => {
     if (audioRef.current) {
-      audioRef.current.play().catch(() => {}); // Play silent audio to enable volume monitoring
-      setIsVolumeHackEnabled(true);
-      lastVolumeRef.current = audioRef.current.volume;
+      // Create a more "active" silent audio context
+      audioRef.current.play().then(() => {
+        setIsVolumeHackEnabled(true);
+        audioRef.current!.volume = 0.5;
+        lastVolumeRef.current = 0.5;
+        
+        if ('mediaSession' in navigator) {
+          navigator.mediaSession.metadata = new MediaMetadata({
+            title: 'Sheet Music Viewer',
+            artist: 'Yu-lign',
+            album: 'Smart Sheet Music',
+            artwork: [
+              { src: 'https://via.placeholder.com/512', sizes: '512x512', type: 'image/png' }
+            ]
+          });
+          navigator.mediaSession.playbackState = 'playing';
+        }
+      }).catch((err) => {
+        console.error("Audio playback error:", err);
+        alert("オーディオの再生に失敗しました。画面を一度タップしてから試してください。");
+      });
     }
   };
 
