@@ -69,6 +69,7 @@ function App() {
       const renderContext = {
         canvasContext: context,
         viewport: viewport,
+        canvas: canvas,
       };
       
       const renderTask = page.render(renderContext);
